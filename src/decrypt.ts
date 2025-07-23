@@ -1,28 +1,46 @@
 import { webcrypto as crypto } from "node:crypto";
 import fs from "node:fs";
 import { x25519 } from "@noble/curves/ed25519";
+import { hmac } from "@noble/hashes/hmac";
 import { sha256 } from "@noble/hashes/sha2";
-import { fromHex } from "./utils.js";
+import { assertLength, fromHex, toHex } from "./utils.js";
 
 async function main(): Promise<void> {
-	// Get raw data that might come from blockchain
+	// Load raw hex data (ephPub || iv || ciphertext || hmac)
 	const fullHex = fs.readFileSync("from-blockchain.hex", "utf8").trim();
 	const fullPayload = fromHex(fullHex);
 
-	// Parse fields
+	// Extract fields
 	const ephPub = fullPayload.slice(0, 32);
+	assertLength(ephPub, 32, "Ephemeral public key");
+
 	const iv = fullPayload.slice(32, 44);
-	const ciphertext = fullPayload.slice(44);
+	assertLength(iv, 12, "IV");
 
-	// Get private key (might be entered on a web page, MUST be secure)
-	const adminPrivHex = fs.readFileSync("admin-priv.hex", "utf8").trim();
-	const adminPriv = fromHex(adminPrivHex);
+	const tag = fullPayload.slice(-32);
+	assertLength(tag, 32, "HMAC tag");
 
-	// Derive shared secret
+	const ciphertext = fullPayload.slice(44, -32);
+	if (ciphertext.length === 0) throw new Error("Ciphertext is empty");
+
+	// Load admin's private key
+	const privHex = fs.readFileSync("admin-priv.hex", "utf8").trim();
+	const adminPriv = fromHex(privHex);
+	assertLength(adminPriv, 32, "Admin private key");
+
+	// Derive shared secret and AES key
 	const shared = x25519.getSharedSecret(adminPriv, ephPub);
-	const aesKey = sha256(shared); // 32 bytes!
+	const aesKey = sha256(shared);
+	const hmacKey = sha256(new TextEncoder().encode(`HMAC${toHex(shared)}`));
 
-	// AES-GCM, decipher
+	// Check HMAC tag
+	const computedTag = hmac(sha256, hmacKey, ciphertext);
+	if (!Buffer.from(computedTag).equals(Buffer.from(tag))) {
+		throw new Error("HMAC verification failed (data tampered?)");
+	}
+	console.log("HMAC verified");
+
+	// Decrypt
 	const cryptoKey = await crypto.subtle.importKey(
 		"raw",
 		aesKey,
@@ -36,7 +54,6 @@ async function main(): Promise<void> {
 		ciphertext,
 	);
 
-	// Decode and print decrypted data
 	const plaintext = new TextDecoder().decode(decryptedBuffer);
 	console.log("Decrypted message:", plaintext);
 }
