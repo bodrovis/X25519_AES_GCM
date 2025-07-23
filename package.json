@@ -1,0 +1,25 @@
+{
+	"name": "x25519-test",
+	"version": "1.0.0",
+	"description": "",
+	"type": "module",
+	"scripts": {
+		"keygen": "tsx src/keygen.ts",
+		"encrypt": "tsx src/encrypt.ts",
+		"decrypt": "tsx src/decrypt.ts",
+		"lint:fix": "npx @biomejs/biome check --write ./",
+		"lint:fix:unsafe": "npx @biomejs/biome check --write --unsafe ./"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"dependencies": {
+		"@noble/curves": "^1.9.4"
+	},
+	"devDependencies": {
+		"@biomejs/biome": "^2.1.2",
+		"@types/node": "^24.1.0",
+		"tsx": "^4.19.2",
+		"typescript": "^5.7.2"
+	}
+}
