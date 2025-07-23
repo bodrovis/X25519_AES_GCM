@@ -28,7 +28,7 @@ async function main(): Promise<void> {
 	const hmacKey = sha256(new TextEncoder().encode(`HMAC${toHex(shared)}`));
 
 	// AES-GCM, ciphering
-	const iv = crypto.getRandomValues(new Uint8Array(12));
+	const iv = randomBytes(12);
 	assertLength(iv, 12, "IV");
 
 	const cryptoKey = await crypto.subtle.importKey(
@@ -59,10 +59,12 @@ async function main(): Promise<void> {
 		ciphertext: toHex(ciphertext),
 		hmac: toHex(tag),
 	};
-	fs.writeFileSync("payload.json", JSON.stringify(payload, null, 2), {
+
+	const payloadFilename = "payload.json";
+	fs.writeFileSync(payloadFilename, JSON.stringify(payload, null, 2), {
 		encoding: "utf8",
 	});
-	console.log("Encrypted and saved to payload.json");
+	console.log(`Encrypted and saved to ${payloadFilename}`);
 
 	// Concatenate binary payload (ephPub || iv || ciphertext || hmac)
 	const fullPayload = new Uint8Array(
@@ -77,8 +79,9 @@ async function main(): Promise<void> {
 	console.log("Raw payload (hex):");
 	console.log(rawHex);
 
-	fs.writeFileSync("from-blockchain.hex", rawHex, { encoding: "utf8" });
-	console.log("Hex payload saved to from-blockchain.hex");
+	const hexFilename = "from-blockchain.hex";
+	fs.writeFileSync(hexFilename, rawHex, { encoding: "utf8" });
+	console.log(`Hex payload saved to ${hexFilename}`);
 }
 
 main().catch((err) => {
