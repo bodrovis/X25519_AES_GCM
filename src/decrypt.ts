@@ -6,11 +6,11 @@ import { sha256 } from "@noble/hashes/sha2";
 import { assertLength, fromHex, toHex } from "./utils.js";
 
 async function main(): Promise<void> {
-	// Load raw hex data (ephPub || iv || ciphertext || hmac)
+	// Load raw payload from blockchain (hex-encoded)
 	const fullHex = fs.readFileSync("from-blockchain.hex", "utf8").trim();
 	const fullPayload = fromHex(fullHex);
 
-	// Extract fields
+	// Parse fields
 	const ephPub = fullPayload.slice(0, 32);
 	assertLength(ephPub, 32, "Ephemeral public key");
 
@@ -28,19 +28,26 @@ async function main(): Promise<void> {
 	const adminPriv = fromHex(privHex);
 	assertLength(adminPriv, 32, "Admin private key");
 
-	// Derive shared secret and AES key
+	// Derive shared secret → AES + HMAC key
 	const shared = x25519.getSharedSecret(adminPriv, ephPub);
 	const aesKey = sha256(shared);
 	const hmacKey = sha256(new TextEncoder().encode(`HMAC${toHex(shared)}`));
 
-	// Check HMAC tag
-	const computedTag = hmac(sha256, hmacKey, ciphertext);
+	// Rebuild HMAC input: ephPub || iv || ciphertext
+	const macInput = new Uint8Array(
+		ephPub.length + iv.length + ciphertext.length,
+	);
+	macInput.set(ephPub, 0);
+	macInput.set(iv, ephPub.length);
+	macInput.set(ciphertext, ephPub.length + iv.length);
+
+	const computedTag = hmac(sha256, hmacKey, macInput);
 	if (!Buffer.from(computedTag).equals(Buffer.from(tag))) {
 		throw new Error("HMAC verification failed (data tampered?)");
 	}
 	console.log("HMAC verified");
 
-	// Decrypt
+	// Decrypt the ciphertext
 	const cryptoKey = await crypto.subtle.importKey(
 		"raw",
 		aesKey,

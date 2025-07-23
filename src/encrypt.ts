@@ -7,30 +7,33 @@ import { randomBytes } from "@noble/hashes/utils";
 import { assertLength, toHex } from "./utils.js";
 
 async function main(): Promise<void> {
-	// Get pub key
+	// Load admin public key
 	const pubHex = fs.readFileSync("admin-pub.hex", "utf8").trim();
 	const adminPub = Uint8Array.from(Buffer.from(pubHex, "hex"));
 	assertLength(adminPub, 32, "Admin public key");
 
-	// Make shared secret
+	// Generate ephemeral keypair
 	const ephPriv = randomBytes(32);
 	const ephPub = x25519.getPublicKey(ephPriv);
 	assertLength(ephPub, 32, "Ephemeral public key");
 
+	// Shared secret → AES key
 	const shared = x25519.getSharedSecret(ephPriv, adminPub);
-	const aesKey = sha256(shared); // 32 bytes!
+	const aesKey = sha256(shared);
 	assertLength(aesKey, 32, "Derived AES key");
 
 	console.log("Ephemeral public key:", toHex(ephPub));
 	console.log("Derived AES key:", toHex(aesKey));
 
-	// Derive separate HMAC key
+	// HMAC key derived from shared secret (separate from AES key)
 	const hmacKey = sha256(new TextEncoder().encode(`HMAC${toHex(shared)}`));
+	assertLength(hmacKey, 32, "HMAC key");
 
-	// AES-GCM, ciphering
+	// Generate IV for AES-GCM
 	const iv = randomBytes(12);
 	assertLength(iv, 12, "IV");
 
+	// Encrypt the message
 	const cryptoKey = await crypto.subtle.importKey(
 		"raw",
 		aesKey,
@@ -49,10 +52,18 @@ async function main(): Promise<void> {
 	);
 	const ciphertext = new Uint8Array(cipherBuffer);
 
-	const tag = hmac(sha256, hmacKey, ciphertext);
+	// HMAC over full structure: ephPub || iv || ciphertext
+	const macInput = new Uint8Array(
+		ephPub.length + iv.length + ciphertext.length,
+	);
+	macInput.set(ephPub, 0);
+	macInput.set(iv, ephPub.length);
+	macInput.set(ciphertext, ephPub.length + iv.length);
+
+	const tag = hmac(sha256, hmacKey, macInput);
 	assertLength(tag, 32, "HMAC tag");
 
-	// Make a payload
+	// Write payload to JSON
 	const payload = {
 		ephPub: toHex(ephPub),
 		iv: toHex(iv),
@@ -61,30 +72,24 @@ async function main(): Promise<void> {
 	};
 
 	const payloadFilename = "payload.json";
-	fs.writeFileSync(payloadFilename, JSON.stringify(payload, null, 2), {
-		encoding: "utf8",
-	});
+	fs.writeFileSync(payloadFilename, JSON.stringify(payload, null, 2), "utf8");
 	console.log(`Encrypted and saved to ${payloadFilename}`);
 
-	// Concatenate binary payload (ephPub || iv || ciphertext || hmac)
-	const fullPayload = new Uint8Array(
-		ephPub.length + iv.length + ciphertext.length + tag.length,
-	);
-	fullPayload.set(ephPub, 0);
-	fullPayload.set(iv, ephPub.length);
-	fullPayload.set(ciphertext, ephPub.length + iv.length);
-	fullPayload.set(tag, ephPub.length + iv.length + ciphertext.length);
+	// Write raw payload: ephPub || iv || ciphertext || hmac
+	const fullPayload = new Uint8Array(macInput.length + tag.length);
+	fullPayload.set(macInput, 0);
+	fullPayload.set(tag, macInput.length);
 
-	const rawHex = toHex(fullPayload);
-	console.log("Raw payload (hex):");
-	console.log(rawHex);
+	const hexOutput = toHex(fullPayload);
 
 	const hexFilename = "from-blockchain.hex";
-	fs.writeFileSync(hexFilename, rawHex, { encoding: "utf8" });
+	fs.writeFileSync(hexFilename, hexOutput, "utf8");
 	console.log(`Hex payload saved to ${hexFilename}`);
+	console.log("Raw payload (hex):");
+	console.log(hexOutput);
 }
 
 main().catch((err) => {
-	console.error("Error:", err);
+	console.error("Encryption failed:", err);
 	process.exit(1);
 });
