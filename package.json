@@ -6,6 +6,8 @@
 	"scripts": {
 		"keygen": "tsx src/keygen.ts",
 		"encrypt": "tsx src/encrypt.ts",
+		"encryptcha": "tsx src/encrypt-cha.ts",
+		"decryptcha": "tsx src/decrypt-cha.ts",
 		"decrypt": "tsx src/decrypt.ts",
 		"lint:fix": "npx @biomejs/biome check --write ./",
 		"lint:fix:unsafe": "npx @biomejs/biome check --write --unsafe ./"
@@ -14,10 +16,12 @@
 	"author": "",
 	"license": "ISC",
 	"dependencies": {
-		"@noble/curves": "^1.9.4"
+		"@noble/curves": "^1.9.4",
+		"libsodium-wrappers": "^0.7.15"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.1.2",
+		"@types/libsodium-wrappers": "^0.7.14",
 		"@types/node": "^24.1.0",
 		"tsx": "^4.19.2",
 		"typescript": "^5.7.2"
