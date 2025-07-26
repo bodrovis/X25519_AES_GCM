@@ -2,6 +2,8 @@
 
 A small Node.js/TypeScript project showing how to encrypt off‑chain data for on‑chain storage using [X25519](https://datatracker.ietf.org/doc/html/rfc7748) + authenticated encryption.
 
+*Video tutorial https://www.youtube.com/watch?v=R0SK7IwTZiw*
+
 ## Supported ciphers
 
 ### AES‑GCM (WebCrypto)
